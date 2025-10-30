@@ -2,58 +2,42 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>자세 분석 기술 검증 (PoC) - 실시간 피드</title>
+    <title>PoseCam - 다중 지표 분석</title>
     <style>
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
-        /* 비디오와 캔버스를 겹치기 위한 컨테이너 스타일 */
-        #live-container {
-            position: relative;
-            width: 640px;
-            height: 480px;
-        }
-        /* 비디오와 캔버스가 컨테이너에 꽉 차도록 설정 */
-        #input-video, #output-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        /* 웹캠 영상 좌우 반전 (거울 모드) */
-        #input-video {
-            transform: scaleX(-1);
-        }
+        #live-container { position: relative; width: 640px; height: 480px; }
+        #input-video, #output-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #input-video { transform: scaleX(-1); }
         #angle-display {
             position: absolute;
             top: 20px;
             left: 20px;
-            background-color: rgba(0, 0, 0, 0.7);
+            background-color: rgba(0, 0, 0, 0.8);
             color: white;
-            padding: 15px;
-            font-size: 1.5em;
+            padding: 10px 15px;
+            font-size: 1em;
             border-radius: 10px;
-            z-index: 10; /* 다른 요소들보다 위에 표시 */
+            z-index: 10;
         }
-        #calibrate-button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            font-size: 1.2em;
-            cursor: pointer;
-        }
+        /* UI 텍스트 스타일 추가 */
+        #angle-display p { margin: 5px 0; }
+        #angle-display .label { font-weight: bold; color: #4CAF50; } /* 녹색 라벨 */
+        #angle-display .value { font-family: monospace; } /* 값은 고정폭 글꼴로 */
+
+        #calibrate-button { margin-top: 20px; padding: 10px 20px; font-size: 1.2em; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>실시간 자세 각도 분석 (캘리브레이션 기능)</h1>
+    <h1>PoseCam - 다중 지표 분석</h1>
     <div id="live-container">
         <video id="input-video" autoplay playsinline></video>
         <canvas id="output-canvas" width="640px" height="480px"></canvas>
         <div id="angle-display">
-            <div>현재 각도: -</div>
-            <div>기준 각도: 미설정</div>
+            <p>자세를 인식하는 중...</p>
         </div>
     </div>
     
-    <button id="calibrate-button">내 바른 자세 측정하기</button>
+    <button id="calibrate-button">내 바른 자세 저장</button>
     
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
