@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "PoseCam (자세 교정기)",
+  "version": "0.1.0",
+  "description": "AI 웹캠을 이용한 실시간 자세 분석 및 알림 서비스",
+  
+  "action": {
+    "default_title": "PoseCam 실행"
+  },
+  
+  "permissions": [
+    "camera",
+    "notifications"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

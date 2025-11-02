@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>PoseCam</title>
+    <style>
+        /* 팝업창 크기에 맞게 CSS 수정 */
+        body { 
+            width: 640px; /* 팝업창의 가로 크기를 고정 */
+            font-family: sans-serif; 
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { font-size: 1.2em; }
+        #live-container { position: relative; width: 640px; height: 480px; }
+        #input-video, #output-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #input-video { transform: scaleX(-1); }
+        #angle-display {
+            position: absolute; top: 10px; left: 10px;
+            background-color: rgba(0, 0, 0, 0.8); color: white;
+            padding: 10px; font-size: 0.9em; border-radius: 5px; z-index: 10;
+        }
+        #angle-display p { margin: 4px 0; }
+        #angle-display .label { font-weight: bold; color: #4CAF50; }
+        #angle-display .value { font-family: monospace; }
+        #controls { margin-top: 10px; }
+        #calibrate-button { margin-top: 490px; padding: 10px; font-size: 1em; }
+    </style>
+</head>
+<body>
+    <h1>PoseCam - 실시간 분석</h1>
+    
+    <div id="controls">
+        <label for="camera-select">카메라 선택:</label>
+        <select id="camera-select"></select>
+    </div>
+
+    <div id="live-container">
+        <video id="input-video" autoplay playsinline></video>
+        <canvas id="output-canvas" width="640px" height="480px"></canvas>
+        <div id="angle-display">
+            <p>자세를 인식하는 중...</p>
+        </div>
+    </div>
+    
+    <button id="calibrate-button">내 바른 자세 저장</button>
+    
+    <script src="./libs/pose.js"></script>
+    <script src="./libs/camera_utils.js"></script>
+    <script src="./libs/drawing_utils.js"></script>
+    
+    <script src="script.js"></script>
+</body>
+</html>
