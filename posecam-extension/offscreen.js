@@ -5,25 +5,23 @@ console.log("Offscreen script가 성공적으로 로드되었습니다.");
 // --- 전역 변수 ---
 let poseLandmarker = undefined;
 let video;
-// (삭제) let lastVideoTime = -1;
 const NOTIFICATION_THRESHOLD_MS = 3000;
 let badPostureStartTime = null;
 let notificationSent = false;
 let latestLandmarks = null;
 let baselinePosture = null;
-const THRESHOLD_TURTLE = 0.03;
-const THRESHOLD_TILT = 0.03;
-
-// (수정) 1. 루프 제어 변수를 'Interval ID'로 변경
 let detectionIntervalId = null;
-const DETECTION_INTERVAL_MS = 100; // 100ms (1초에 10번)
+const DETECTION_INTERVAL_MS = 100;
 
-// (삭제) 2. 스트림 멈춤 감지용 변수 제거
-// let lastTimeCheck = Date.now();
-// const STREAM_TIMEOUT_MS = 2000;
+// (수정) 3D(Z) 민감도. 
+// z좌표는 -1~1 사이가 아니므로, x,y(0~1)보다 더 큰 값이 나올 수 있습니다.
+// 일단 THRESHOLD_TURTLE 값을 0.03 (x/y와 동일)로 두되,
+// "거북목인데 감지가 안되면" 이 값을 0.01 등으로 줄여야 합니다.
+const THRESHOLD_TURTLE = 0.03; // 거북목 (귀-어깨 z)
+const THRESHOLD_TILT = 0.03;   // 좌우 기울임 (어깨-어깨 y)
 
 // -----------------------------------------------------------------------------
-// 1. 캘리브레이션 및 메시지 리스너 (이전과 동일)
+// 1. 캘리브레이션 및 메시지 리스너 (🚨 3D(z) 기준으로 수정됨)
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action === "calibrate") {
@@ -32,14 +30,18 @@ chrome.runtime.onMessage.addListener((message) => {
       const ear_r = latestLandmarks[7];
       const shoulder_r = latestLandmarks[11];
       const shoulder_l = latestLandmarks[12];
+      
+      // (수정) 귀와 어깨의 z좌표(깊이)를 확인합니다.
       if (ear_r && shoulder_r && shoulder_l) {
         const newBaseline = {
-          turtle_diff_x: ear_r.x - shoulder_r.x,
+          // 👇 (핵심 수정) x좌표 대신 z좌표(깊이)의 차이를 저장합니다.
+          turtle_diff_z: ear_r.z - shoulder_r.z,
+          // 👇 (동일) y좌표(기울임)는 그대로 둡니다.
           tilt_diff_y: shoulder_r.y - shoulder_l.y
         };
         chrome.runtime.sendMessage({ action: "saveBaseline", data: newBaseline });
         baselinePosture = newBaseline;
-        console.log("새로운 기준 자세를 Service Worker에 저장 요청함:", newBaseline);
+        console.log("새로운 기준 자세(3D)를 Service Worker에 저장 요청함:", newBaseline);
       } else {
         chrome.runtime.sendMessage({ action: "sendNotification", message: "자세를 감지할 수 없습니다. 카메라를 확인하고 다시 시도하세요." });
       }
@@ -70,43 +72,30 @@ async function createPoseLandmarker() {
 }
 
 async function enableCam() {
-  // (수정) 기존 'Interval' 루프가 있다면 중지
-  if (detectionIntervalId) {
-    clearInterval(detectionIntervalId);
-    detectionIntervalId = null;
-  }
-  
+  if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
   video = document.getElementById("webcam"); 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
     video.srcObject = stream;
-    video.removeEventListener("playing", startLoop); // 중복 방지
+    video.removeEventListener("playing", startLoop);
     video.addEventListener("playing", startLoop);
     video.play();
     console.log("웹캠이 성공적으로 연결되었습니다.");
   } catch (err) { console.error("웹캠 접근 중 오류 발생:", err); }
 }
 
-// (수정) 3. 루프 시작 함수 (setInterval 사용)
 function startLoop() {
   console.log("predictWebcam 루프 시작 (setInterval)");
-  
-  // (수정) 기존 루프가 있다면 중지 (캘리브레이션 후 재시작 대비)
-  if (detectionIntervalId) {
-    clearInterval(detectionIntervalId);
-  }
-  
+  if (detectionIntervalId) { clearInterval(detectionIntervalId); }
   detectionIntervalId = setInterval(predictWebcam, DETECTION_INTERVAL_MS);
 }
 
 // -----------------------------------------------------------------------------
-// 4. 실시간 자세 분석 (🚨 async 및 requestAnimationFrame 제거됨)
+// 3. 실시간 자세 분석 (🚨 3D(z) 기준으로 수정됨)
 // -----------------------------------------------------------------------------
-function predictWebcam() { // (수정) async 제거
+function predictWebcam() {
   try {
-    // (수정) video.currentTime을 사용하지 않고, 비디오가 재생 중인지(paused)만 확인
     if (!video.paused) {
-      
       const startTimeMs = performance.now();
       const results = poseLandmarker.detectForVideo(video, startTimeMs);
 
@@ -119,28 +108,33 @@ function predictWebcam() { // (수정) async 제거
         let logMessage = ""; 
 
         if (baselinePosture) {
-          // --- 기준 자세가 있을 때 ---
           const ear_r = landmarks[7];
           const shoulder_r = landmarks[11];
           const shoulder_l = landmarks[12];
 
-          // 1. 거북목 검사
-          if (ear_r && shoulder_r && baselinePosture.hasOwnProperty('turtle_diff_x')) {
-            const current_turtle_diff = ear_r.x - shoulder_r.x;
-            const isTurtleNeck = current_turtle_diff < (baselinePosture.turtle_diff_x - THRESHOLD_TURTLE);
-            logMessage += `[거북목?: ${isTurtleNeck} (현재:${current_turtle_diff.toFixed(2)}, 기준:${baselinePosture.turtle_diff_x.toFixed(2)})] `;
+          // 1. 거북목 검사 (z좌표 기준)
+          // (수정) .z 속성이 있는지 확인
+          if (ear_r && shoulder_r && baselinePosture.hasOwnProperty('turtle_diff_z')) {
+            // 👇 (핵심 수정) x 대신 z좌표(깊이)로 현재 차이를 계산
+            const current_turtle_diff = ear_r.z - shoulder_r.z;
+            
+            // z좌표는 카메라에 가까울수록 값이 '작아집니다' (예: -0.5)
+            // 거북목이 되면 귀(ear.z)가 더 작아지므로, current_turtle_diff가 기준(baseline)보다 '작아집니다'.
+            const isTurtleNeck = current_turtle_diff < (baselinePosture.turtle_diff_z - THRESHOLD_TURTLE);
+            
+            logMessage += `[거북목(Z)?: ${isTurtleNeck} (현재:${current_turtle_diff.toFixed(2)}, 기준:${baselinePosture.turtle_diff_z.toFixed(2)})] `;
             if (isTurtleNeck) {
               isBadPosture = true;
               badPostureReason = "거북목";
             }
           }
           
-          // 2. 기울임 검사
+          // 2. 기울임 검사 (y좌표 기준)
           if (shoulder_r && shoulder_l && baselinePosture.hasOwnProperty('tilt_diff_y')) {
             const current_tilt_diff = shoulder_r.y - shoulder_l.y;
             const tilt_deviation = current_tilt_diff - baselinePosture.tilt_diff_y;
             const isTilted = Math.abs(tilt_deviation) > THRESHOLD_TILT;
-            logMessage += `[기울임?: ${isTilted} (현재:${current_tilt_diff.toFixed(2)}, 기준:${baselinePosture.tilt_diff_y.toFixed(2)})]`;
+            logMessage += `[기울임(Y)?: ${isTilted} (현재:${current_tilt_diff.toFixed(2)}, 기준:${baselinePosture.tilt_diff_y.toFixed(2)})]`;
             if (isTilted) {
               isBadPosture = true;
               badPostureReason = "기울어짐";
@@ -150,12 +144,9 @@ function predictWebcam() { // (수정) async 제거
           console.log(logMessage || "랜드마크 감지 중... (기준 자세 있음)");
 
         } else {
-          // --- 기준 자세가 없을 때 ---
           isBadPosture = false;
           if (badPostureStartTime === null) {
-            if(Math.random() < 0.1) { // (로그 빈도 증가)
-              console.log("기준 자세가 없습니다. 팝업에서 '자세 측정'을 눌러주세요.");
-            }
+            if(Math.random() < 0.1) { console.log("기준 자세가 없습니다. 팝업에서 '자세 측정'을 눌러주세요."); }
           }
         }
 
@@ -167,7 +158,6 @@ function predictWebcam() { // (수정) async 제거
           } else {
             const duration = Date.now() - badPostureStartTime;
             if (duration >= NOTIFICATION_THRESHOLD_MS && !notificationSent) {
-              // ... (알림 메시지 전송 로직 동일) ...
               let message = "자세가 3초 이상 무너졌습니다!";
               if (badPostureReason === "거북목") message = "거북목이 의심됩니다! 턱을 당기고 어깨를 펴세요.";
               else if (badPostureReason === "기울어짐") message = "몸이 기울었습니다! 자세를 바로잡으세요.";
@@ -186,29 +176,15 @@ function predictWebcam() { // (수정) async 제거
       }
       
     } else {
-      // --- (수정) 스트림 멈춤(video.paused) 감지 ---
       console.warn("비디오 스트림이 일시 중지(paused)되었습니다. 재시도를 시도합니다.");
-      
-      // 캘리브레이션 탭이 닫히면서 스트림이 죽는 경우가 있음
-      // 1초 후 웹캠 재시작 시도
-      if (detectionIntervalId) {
-        clearInterval(detectionIntervalId);
-        detectionIntervalId = null;
-      }
+      if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
       setTimeout(enableCam, 1000);
     }
   } catch (error) {
-    // --- 치명적 오류 감지 ---
     console.error("predictWebcam 루프 중 치명적 오류 발생:", error);
-    if (detectionIntervalId) {
-      clearInterval(detectionIntervalId);
-      detectionIntervalId = null;
-    }
-    setTimeout(enableCam, 3000); // 3초 후 재시작
+    if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
+    setTimeout(enableCam, 3000);
   }
-  
-  // (삭제) 5. requestAnimationFrame 제거!
-  // animationFrameId = window.requestAnimationFrame(predictWebcam);
 }
 
 // -----------------------------------------------------------------------------

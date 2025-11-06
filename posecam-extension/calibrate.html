@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>기준 자세 측정</title>
   <style>
+    /* ... (body, video, button 스타일은 동일) ... */
     body {
       font-family: Arial, sans-serif;
       display: flex;
@@ -32,14 +33,32 @@
       cursor: pointer;
       border-radius: 5px;
     }
-    button:hover {
-      background-color: #218838;
+    button:hover { background-color: #218838; }
+
+    /* (추가) 카메라 선택 드롭다운 스타일 */
+    .camera-select {
+      margin-bottom: 15px;
+    }
+    .camera-select label {
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    .camera-select select {
+      padding: 5px;
+      font-size: 14px;
+      border-radius: 4px;
     }
   </style>
 </head>
 <body>
   <h1>기준 자세 측정하기</h1>
   <p>카메라를 보고 가장 바른 자세를 취한 뒤, 아래 버튼을 눌러주세요.</p>
+
+  <div class="camera-select">
+    <label for="cameraSelect">카메라 선택:</label>
+    <select id="cameraSelect"></select>
+  </div>
+
   <video id="previewVideo" autoplay playsinline></video>
   <button id="saveButton">이 자세로 저장하기</button>
 
