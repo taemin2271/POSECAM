@@ -1,48 +1,81 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>PoseCam (Local)</title>
-    <style>
-        body { width: 640px; font-family: sans-serif; margin: 0; padding: 10px; }
-        h1 { font-size: 1.2em; text-align: center; }
-        #live-container { position: relative; width: 640px; height: 480px; }
-        #input-video, #output-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #input-video { transform: scaleX(-1); }
-        #angle-display {
-            position: absolute; top: 10px; left: 10px;
-            background-color: rgba(0, 0, 0, 0.8); color: white;
-            padding: 10px; font-size: 0.9em; border-radius: 5px; z-index: 10;
-        }
-        #angle-display p { margin: 4px 0; }
-        #angle-display .label { font-weight: bold; color: #4CAF50; }
-        #angle-display .value { font-family: monospace; }
-        #controls { margin-top: 10px; text-align: center; }
-        #calibrate-button { margin-top: 490px; padding: 10px; font-size: 1em; }
-    </style>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 250px;
+      padding: 15px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+    /* The switch - a round slider */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px; /* 60px */
+      height: 28px; /* 34px */
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px; /* 26px */
+      width: 20px; /* 26px */
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+    }
+    input:checked + .slider {
+      background-color: #2196F3; /* Blue color */
+    }
+    input:checked + .slider:before {
+      transform: translateX(22px); /* 26px */
+    }
+    /* Rounded sliders */
+    .slider.round {
+      border-radius: 34px;
+    }
+    .slider.round:before {
+      border-radius: 50%;
+    }
+  </style>
 </head>
 <body>
-    <h1>PoseCam - 실시간 분석 (v4 Local)</h1>
-    
-    <div id="controls">
-        <label for="camera-select">카메라 선택:</label>
-        <select id="camera-select"></select>
-    </div>
+  <div class="container">
+    <h3>Posecam 활성화</h3>
+    <label class="switch">
+      <input type="checkbox" id="toggleSwitch">
+      <span class="slider round"></span>
+    </label>
+  </div>
 
-    <div id="live-container">
-        <video id="input-video" autoplay playsinline></video>
-        <canvas id="output-canvas" width="640px" height="480px"></canvas>
-        <div id="angle-display">
-            <p>AI 모델 로드 중...</p>
-        </div>
-    </div>
-    
-    <button id="calibrate-button">내 바른 자세 저장</button>
-    
-    <script src="./libs/pose.js"></script>
-    <script src="./libs/camera_utils.js"></script>
-    <script src="./libs/drawing_utils.js"></script>
-    
-    <script src="script.js"></script>
+  <script src="popup.js"></script>
+
 </body>
 </html>
