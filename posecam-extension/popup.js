@@ -1,6 +1,7 @@
 // DOM이 완전히 로드된 후에 스크립트를 실행합니다.
 document.addEventListener('DOMContentLoaded', () => {
   const toggleSwitch = document.getElementById('toggleSwitch');
+  const calibrateButton = document.getElementById('calibrateButton'); // 1. 버튼 선택
 
   // 1. 팝업이 열릴 때, 저장된 스위치 상태를 불러옵니다.
   chrome.storage.local.get(['isEnabled'], (result) => {
@@ -23,5 +24,16 @@ document.addEventListener('DOMContentLoaded', () => {
       // 스위치가 꺼졌을 때
       chrome.runtime.sendMessage({ action: "stopMonitoring" });
     }
+  });
+
+  // 👇 2. '자세 측정' 버튼 클릭 이벤트 추가
+  calibrateButton.addEventListener('click', () => {
+    console.log("Calibrate 버튼 클릭됨 (in popup.js)");
+    
+    // 1. 'calibrate.html'을 새 탭으로 엽니다.
+    chrome.tabs.create({ url: 'calibrate.html' });
+    
+    // 2. 팝업창은 바로 닫습니다.
+    window.close();
   });
 });

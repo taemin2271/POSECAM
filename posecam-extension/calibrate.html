@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>기준 자세 측정</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+    video {
+      border: 2px solid #333;
+      border-radius: 8px;
+      transform: scaleX(-1); /* 거울 모드 */
+      width: 640px;
+      height: 480px;
+      background-color: #000;
+    }
+    button {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 18px;
+      margin-top: 20px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    button:hover {
+      background-color: #218838;
+    }
+  </style>
+</head>
+<body>
+  <h1>기준 자세 측정하기</h1>
+  <p>카메라를 보고 가장 바른 자세를 취한 뒤, 아래 버튼을 눌러주세요.</p>
+  <video id="previewVideo" autoplay playsinline></video>
+  <button id="saveButton">이 자세로 저장하기</button>
+
+  <script src="calibrate.js"></script>
+</body>
+</html>

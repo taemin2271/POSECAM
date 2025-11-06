@@ -64,6 +64,25 @@
     .slider.round:before {
       border-radius: 50%;
     }
+    body { width: 250px; /* ... */ }
+    /* (추가) 버튼 스타일 */
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+      margin-top: 15px;
+      width: 100%;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
   </style>
 </head>
 <body>
@@ -74,6 +93,8 @@
       <span class="slider round"></span>
     </label>
   </div>
+
+  <button id="calibrateButton">기준 자세 측정하기</button>
 
   <script src="popup.js"></script>
 
