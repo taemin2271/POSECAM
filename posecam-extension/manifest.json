@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Posecam - 자세 교정 알리미",
   "version": "0.1.0",
-  
+  "description": "실시간으로 자세를 분석하고, 자세가 무너졌을 때 알림을 보내줍니다.",
 
   "permissions": [
     "notifications",
@@ -14,18 +14,12 @@
     "service_worker": "service-worker.js"
   },
 
-  
   "action": {
     "default_popup": "popup.html",
     "default_title": "Posecam"
-   
   },
   
-  "icons": {
-   
-  },
-
-"content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com"
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com;"
   }
 }

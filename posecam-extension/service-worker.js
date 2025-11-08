@@ -1,19 +1,15 @@
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
 let lastNotificationId = null;
+// (삭제) let stretchReminderCount = 0;
+// (삭제) let lastStretchNotificationId = null;
 
 // --- Offscreen Document 헬퍼 함수들 (이전과 동일) ---
 async function hasOffscreenDocument() {
-  const existingContexts = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT']
-  });
+  const existingContexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
   return !!existingContexts.length;
 }
-
 async function createOffscreenDocument() {
-  if (await hasOffscreenDocument()) {
-    console.log("Offscreen document가 이미 존재합니다.");
-    return;
-  }
+  if (await hasOffscreenDocument()) { console.log("Offscreen document가 이미 존재합니다."); return; }
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT_PATH,
     reasons: ['USER_MEDIA'],
@@ -21,35 +17,23 @@ async function createOffscreenDocument() {
   });
   console.log("Offscreen document 생성됨.");
 }
-
 async function closeOffscreenDocument() {
-  if (!(await hasOffscreenDocument())) {
-    console.log("Offscreen document가 존재하지 않아 닫을 수 없습니다.");
-    return;
-  }
+  if (!(await hasOffscreenDocument())) { console.log("Offscreen document가 존재하지 않아 닫을 수 없습니다."); return; }
   await chrome.offscreen.closeDocument();
   console.log("Offscreen document 닫힘.");
 }
 
 // -----------------------------------------------------------------------------
-// 🚨 (수정) 이벤트 리스너: 저장/불러오기 기능 추가
+// 이벤트 리스너 (onMessage)
 // -----------------------------------------------------------------------------
-
 chrome.runtime.onMessage.addListener(async (message) => {
   if (message.action === "startMonitoring") {
-    // 1. 모니터링 시작
+    // 1. 모니터링 시작 (이전과 동일)
     console.log("Service Worker: 모니터링 시작 메시지 수신");
-    
-    // (추가) 1. 먼저 저장소에서 기준 자세를 불러옵니다.
     const result = await chrome.storage.local.get(['baselinePosture']);
     const baseline = result.baselinePosture;
     console.log("Service Worker: 저장된 기준 자세 불러옴:", baseline);
-    
-    // (추가) 2. Offscreen document를 생성합니다.
     await createOffscreenDocument();
-    
-    // (추가) 3. 생성된 Offscreen document에 기준 자세를 전송합니다.
-    // (1초 지연: offscreen.js의 리스너가 준비될 시간을 줍니다)
     setTimeout(() => {
         chrome.runtime.sendMessage({ action: "setBaseline", data: baseline });
     }, 1000);
@@ -58,17 +42,12 @@ chrome.runtime.onMessage.addListener(async (message) => {
     // 2. 모니터링 중지 (이전과 동일)
     console.log("Service Worker: 모니터링 중지 메시지 수신");
     await closeOffscreenDocument();
-    if(lastNotificationId) {
-      chrome.notifications.clear(lastNotificationId);
-      lastNotificationId = null;
-    }
+    if(lastNotificationId) { chrome.notifications.clear(lastNotificationId); lastNotificationId = null; }
     
   } else if (message.action === "sendNotification") {
-    // 3. 알림 전송 (이전과 동일)
+    // 3. 알림 전송 (스트레칭 제안 로직 삭제됨)
     console.log("Service Worker: 알림 요청 수신");
-    if(lastNotificationId) {
-      chrome.notifications.clear(lastNotificationId);
-    }
+    if(lastNotificationId) { chrome.notifications.clear(lastNotificationId); }
     chrome.notifications.create({
       type: "basic",
       iconUrl: "images/icon128.png",
@@ -78,14 +57,13 @@ chrome.runtime.onMessage.addListener(async (message) => {
       lastNotificationId = notificationId;
     });
     
+    // (수정!) 통계 저장은 그대로 수행
+    await saveStats(message.reason); 
+
   } else if (message.action === "saveBaseline") {
-    // 4. (추가!) offscreen.js로부터 '기준 자세 저장' 요청을 받습니다.
+    // 4. 기준 자세 저장 (이전과 동일)
     console.log("Service Worker: 기준 자세 저장 요청 수신", message.data);
-    
-    // 4a. 저장소에 저장합니다.
     await chrome.storage.local.set({ baselinePosture: message.data });
-    
-    // 4b. 저장 완료 알림을 보냅니다.
     chrome.notifications.create({
       type: "basic",
       iconUrl: "images/icon128.png",
@@ -97,7 +75,28 @@ chrome.runtime.onMessage.addListener(async (message) => {
   }
 });
 
-// --- (onStartup, onInstalled 리스너는 이전과 동일) ---
+// (수정!) 오직 통계 저장만 하는 함수
+async function saveStats(reasonKey) {
+  const today = new Date().toISOString().split('T')[0];
+  const result = await chrome.storage.local.get([today]);
+  
+  let todayStats = result[today] || { total: 0, byReason: {} };
+  todayStats.total += 1;
+  todayStats.byReason[reasonKey] = (todayStats.byReason[reasonKey] || 0) + 1;
+  
+  await chrome.storage.local.set({ [today]: todayStats });
+  console.log("통계 저장 완료:", todayStats);
+  
+  // (삭제!) 스트레칭 카운터 로직 모두 제거
+}
+
+// (삭제!) 🚨 chrome.notifications.onButtonClicked.addListener(...) 함수 전체 삭제
+
+// ... (onStartup, onInstalled 리스너는 이전과 동일) ...
+
+
+
+// ... (onStartup, onInstalled 리스너는 이전과 동일) ...
 // -----------------------------------------------------------------------------
 // 🚨 (수정) onStartup / onInstalled 리스너
 // -----------------------------------------------------------------------------
