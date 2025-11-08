@@ -13,11 +13,39 @@ let baselinePosture = null;
 let detectionIntervalId = null;
 const DETECTION_INTERVAL_MS = 100;
 
-const THRESHOLD_TURTLE_ANGLE_RAD = 0.05; // 3도(Radian)
-const THRESHOLD_TILT_Y_DIFF = 0.03;      // 기울임
+// (추가) 민감도 맵 (1: 둔감, 2: 보통, 3: 민감)
+const SENSITIVITY_MAP = {
+  turtle: {
+    1: 0.14, // 둔감 (약 8도)
+    2: 0.07, // 보통 (약 4도)
+    3: 0.035 // 민감 (약 2도)
+  },
+  tilt: {
+    1: 0.05, // 둔감
+    2: 0.03, // 보통
+    3: 0.02  // 민감
+  }
+};
+
+// (추가) 현재 민감도 변수 (기본값 '보통')
+let currentTurtleThreshold = SENSITIVITY_MAP.turtle[2];
+let currentTiltThreshold = SENSITIVITY_MAP.tilt[2];
+
+// (추가) 민감도 설정 헬퍼 함수
+function setSensitivity(level) {
+  const sensitivityLevel = level || 2; // 기본값 2 (보통)
+  
+  currentTurtleThreshold = SENSITIVITY_MAP.turtle[sensitivityLevel];
+  currentTiltThreshold = SENSITIVITY_MAP.tilt[sensitivityLevel];
+  
+  console.log(`민감도 ${sensitivityLevel}단계로 변경됨:`, {
+    turtle: currentTurtleThreshold,
+    tilt: currentTiltThreshold
+  });
+}
 
 // -----------------------------------------------------------------------------
-// 1. 캘리브레이션 및 메시지 리스너 (이전과 동일)
+// 1. 캘리브레이션 및 메시지 리스너
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action === "calibrate") {
@@ -48,17 +76,23 @@ chrome.runtime.onMessage.addListener((message) => {
   } else if (message.action === "setBaseline") {
     console.log("Service Worker로부터 기준 자세 받음:", message.data);
     baselinePosture = message.data;
+    
+  } else if (message.action === "sensitivityChanged" || message.action === "setSensitivity") {
+    // 3. (추가!) popup.js 또는 service-worker.js로부터 '민감도' 메시지 수신
+    setSensitivity(message.sensitivity);
   }
 });
 
 // -----------------------------------------------------------------------------
-// 2. MediaPipe 초기화 및 웹캠 설정 (이전과 동일)
+// 2. MediaPipe 초기화 및 웹캠 설정
 // -----------------------------------------------------------------------------
 async function createPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks('./wasm');
   poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
     baseOptions: {
+      // 👇👇👇 (핵심 수정!) 'https' -> 'https'로 오타 수정
       modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task`,
+      // 👆👆👆 (핵심 수정!)
       delegate: "GPU"
     },
     runningMode: "VIDEO",
@@ -88,7 +122,7 @@ function startLoop() {
 }
 
 // -----------------------------------------------------------------------------
-// 3. 실시간 자세 분석 (🚨 거북목 로직 수정됨)
+// 3. 실시간 자세 분석
 // -----------------------------------------------------------------------------
 function predictWebcam() {
   try {
@@ -109,15 +143,13 @@ function predictWebcam() {
           const shoulder_r = landmarks[11];
           const shoulder_l = landmarks[12];
 
-          // 1. 거북목 검사 (CVA 각도 기준)
+          // 1. 거북목 검사
           if (ear_r && shoulder_r && baselinePosture.hasOwnProperty('turtle_angle_rad')) {
             const dx = ear_r.x - shoulder_r.x;
             const dy = ear_r.y - shoulder_r.y;
             const current_angle_rad = Math.atan2(dy, dx);
             
-            // 👇👇👇 (핵심 수정!) 거북목이 되면(턱이 빠지면) 각도가 '커집니다'.
-            const isTurtleNeck = current_angle_rad > (baselinePosture.turtle_angle_rad + THRESHOLD_TURTLE_ANGLE_RAD);
-            // 👆👆👆 (핵심 수정!)
+            const isTurtleNeck = current_angle_rad > (baselinePosture.turtle_angle_rad + currentTurtleThreshold);
             
             logMessage += `[거북목(Angle)?: ${isTurtleNeck} (현재:${current_angle_rad.toFixed(2)}, 기준:${baselinePosture.turtle_angle_rad.toFixed(2)})] `;
             if (isTurtleNeck) {
@@ -126,11 +158,13 @@ function predictWebcam() {
             }
           }
           
-          // 2. 기울임 검사 (Y좌표 차이 기준)
+          // 2. 기울임 검사
           if (shoulder_r && shoulder_l && baselinePosture.hasOwnProperty('tilt_diff_y')) {
             const current_tilt_diff = shoulder_r.y - shoulder_l.y;
             const tilt_deviation = current_tilt_diff - baselinePosture.tilt_diff_y;
-            const isTilted = Math.abs(tilt_deviation) > THRESHOLD_TILT_Y_DIFF;
+            
+            const isTilted = Math.abs(tilt_deviation) > currentTiltThreshold;
+            
             logMessage += `[기울임(Y)?: ${isTilted} (현재:${current_tilt_diff.toFixed(2)}, 기준:${baselinePosture.tilt_diff_y.toFixed(2)})]`;
             if (isTilted) {
               isBadPosture = true;
@@ -145,7 +179,7 @@ function predictWebcam() {
           if(Math.random() < 0.1) { console.log("기준 자세가 없습니다. 팝업에서 '자세 측정'을 눌러주세요."); }
         }
 
-        // --- 알림 타이머 로직 (이전과 동일) ---
+        // --- 알림 타이머 로직 ---
         if (isBadPosture) {
           if (badPostureStartTime === null) {
             badPostureStartTime = Date.now();

@@ -5,7 +5,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      width: 250px;
+      width: 280px; /* (폭을 조금 넓힘) */
       padding: 15px;
       background-color: #f9f9f9;
       color: #333;
@@ -14,74 +14,72 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 15px; /* (간격 추가) */
     }
-    h3 {
-      margin: 0;
-      font-size: 16px;
-    }
-    /* The switch - a round slider */
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 50px; /* 60px */
-      height: 28px; /* 34px */
-    }
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #ccc;
-      transition: .4s;
-    }
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 20px; /* 26px */
-      width: 20px; /* 26px */
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-    }
-    input:checked + .slider {
-      background-color: #2196F3; /* Blue color */
-    }
-    input:checked + .slider:before {
-      transform: translateX(22px); /* 26px */
-    }
-    /* Rounded sliders */
-    .slider.round {
-      border-radius: 34px;
-    }
-    .slider.round:before {
-      border-radius: 50%;
-    }
-    body { width: 250px; /* ... */ }
-    /* (추가) 버튼 스타일 */
+    h3 { margin: 0; font-size: 16px; }
+    
+    /* (버튼 스타일 수정) */
     button {
       background-color: #007bff;
       color: white;
       border: none;
       padding: 8px 12px;
-      text-align: center;
-      text-decoration: none;
-      display: inline-block;
       font-size: 14px;
-      margin-top: 15px;
       width: 100%;
       cursor: pointer;
       border-radius: 4px;
+      margin-top: 10px; /* (간격 통일) */
     }
-    button:hover {
-      background-color: #0056b3;
+    button:hover { background-color: #0056b3; }
+    #dashboardButton { background-color: #555; }
+
+    /* (토글 스위치 CSS는 그대로) */
+    .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; }
+    input:checked + .slider { background-color: #2196F3; }
+    input:checked + .slider:before { transform: translateX(22px); }
+    .slider.round { border-radius: 34px; }
+    .slider.round:before { border-radius: 50%; }
+    
+    /* 👇 (추가) 민감도 슬라이더 영역 스타일 */
+    .sensitivity-control {
+      margin-top: 20px;
+      border-top: 1px solid #ddd;
+      padding-top: 15px;
+    }
+    .sensitivity-control label {
+      font-size: 14px;
+      font-weight: bold;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .slider-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #555;
+    }
+    .slider-container input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 60%; /* (슬라이더 폭) */
+      height: 8px;
+      background: #ddd;
+      outline: none;
+      border-radius: 5px;
+    }
+    /* (슬라이더 손잡이 스타일) */
+    .slider-container input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #007bff;
+      cursor: pointer;
+      border-radius: 50%;
     }
   </style>
 </head>
@@ -94,11 +92,17 @@
     </label>
   </div>
 
-  <button id="calibrateButton">기준 자세 측정하기</button>
+  <div class="sensitivity-control">
+    <label for="sensitivitySlider">알림 민감도</label>
+    <div class="slider-container">
+      <span>둔감</span>
+      <input type="range" min="1" max="3" value="2" id="sensitivitySlider">
+      <span>민감</span>
+    </div>
+  </div>
 
-  <button id="dashboardButton" style="background-color: #555; margin-top: 10px;">
-    통계 대시보드 보기
-  </button>
+  <button id="calibrateButton">기준 자세 측정하기</button>
+  <button id="dashboardButton">통계 대시보드 보기</button>
 
   <script src="popup.js"></script>
 </body>

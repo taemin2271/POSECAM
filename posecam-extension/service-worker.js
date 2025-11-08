@@ -24,19 +24,28 @@ async function closeOffscreenDocument() {
 }
 
 // -----------------------------------------------------------------------------
-// 이벤트 리스너 (onMessage)
+// 이벤트 리스너 (onMessage) (🚨 민감도 로직 추가됨)
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener(async (message) => {
   if (message.action === "startMonitoring") {
-    // 1. 모니터링 시작 (이전과 동일)
+    // 1. 모니터링 시작
     console.log("Service Worker: 모니터링 시작 메시지 수신");
-    const result = await chrome.storage.local.get(['baselinePosture']);
+    
+    // (수정) 기준 자세와 민감도를 '동시에' 불러옵니다.
+    const result = await chrome.storage.local.get(['baselinePosture', 'sensitivity']);
     const baseline = result.baselinePosture;
+    const sensitivity = result.sensitivity || 2; // 기본값 2 (보통)
+    
     console.log("Service Worker: 저장된 기준 자세 불러옴:", baseline);
+    console.log("Service Worker: 저장된 민감도 불러옴:", sensitivity);
+    
     await createOffscreenDocument();
+    
+    // (수정) 1초 지연 후, 기준 자세와 민감도를 '둘 다' 전송
     setTimeout(() => {
         chrome.runtime.sendMessage({ action: "setBaseline", data: baseline });
-    }, 1000);
+        chrome.runtime.sendMessage({ action: "setSensitivity", sensitivity: sensitivity });
+    }, 1000); // 1초 지연 (offscreen.js 로드 대기)
 
   } else if (message.action === "stopMonitoring") {
     // 2. 모니터링 중지 (이전과 동일)
@@ -45,7 +54,7 @@ chrome.runtime.onMessage.addListener(async (message) => {
     if(lastNotificationId) { chrome.notifications.clear(lastNotificationId); lastNotificationId = null; }
     
   } else if (message.action === "sendNotification") {
-    // 3. 알림 전송 (스트레칭 제안 로직 삭제됨)
+    // 3. 알림 전송 (이전과 동일)
     console.log("Service Worker: 알림 요청 수신");
     if(lastNotificationId) { chrome.notifications.clear(lastNotificationId); }
     chrome.notifications.create({
@@ -57,7 +66,6 @@ chrome.runtime.onMessage.addListener(async (message) => {
       lastNotificationId = notificationId;
     });
     
-    // (수정!) 통계 저장은 그대로 수행
     await saveStats(message.reason); 
 
   } else if (message.action === "saveBaseline") {
@@ -72,6 +80,12 @@ chrome.runtime.onMessage.addListener(async (message) => {
     }, (notificationId) => {
       lastNotificationId = notificationId;
     });
+    
+  } else if (message.action === "sensitivityChanged") {
+    // 5. (추가!) popup.js로부터 '민감도 변경' 메시지 수신
+    console.log("Service Worker: 민감도 변경 수신. offscreen.js로 전달.");
+    // offscreen.js에 바로 전달
+    chrome.runtime.sendMessage(message);
   }
 });
 
