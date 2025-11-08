@@ -10,10 +10,11 @@ let badPostureStartTime = null;
 let notificationSent = false;
 let latestLandmarks = null;
 let baselinePosture = null;
-const THRESHOLD_TURTLE = 0.03;
-const THRESHOLD_TILT = 0.03;
 let detectionIntervalId = null;
-const DETECTION_INTERVAL_MS = 100; // 1초에 10번
+const DETECTION_INTERVAL_MS = 100;
+
+const THRESHOLD_TURTLE_ANGLE_RAD = 0.05; // 3도(Radian)
+const THRESHOLD_TILT_Y_DIFF = 0.03;      // 기울임
 
 // -----------------------------------------------------------------------------
 // 1. 캘리브레이션 및 메시지 리스너 (이전과 동일)
@@ -25,14 +26,19 @@ chrome.runtime.onMessage.addListener((message) => {
       const ear_r = latestLandmarks[7];
       const shoulder_r = latestLandmarks[11];
       const shoulder_l = latestLandmarks[12];
+      
       if (ear_r && shoulder_r && shoulder_l) {
+        const dx = ear_r.x - shoulder_r.x;
+        const dy = ear_r.y - shoulder_r.y;
+        const turtle_angle_rad = Math.atan2(dy, dx);
+        
         const newBaseline = {
-          turtle_diff_x: ear_r.x - shoulder_r.x,
+          turtle_angle_rad: turtle_angle_rad,
           tilt_diff_y: shoulder_r.y - shoulder_l.y
         };
         chrome.runtime.sendMessage({ action: "saveBaseline", data: newBaseline });
         baselinePosture = newBaseline;
-        console.log("새로운 기준 자세를 Service Worker에 저장 요청함:", newBaseline);
+        console.log("새로운 기준 자세(Angle)를 Service Worker에 저장 요청함:", newBaseline);
       } else {
         chrome.runtime.sendMessage({ action: "sendNotification", message: "자세를 감지할 수 없습니다. 카메라를 확인하고 다시 시도하세요." });
       }
@@ -82,11 +88,10 @@ function startLoop() {
 }
 
 // -----------------------------------------------------------------------------
-// 3. 실시간 자세 분석 (🚨 자동 재시작 로직이 포함된 최종본)
+// 3. 실시간 자세 분석 (🚨 거북목 로직 수정됨)
 // -----------------------------------------------------------------------------
 function predictWebcam() {
   try {
-    // 1. (정상) 비디오가 재생 중일 때
     if (!video.paused) {
       const startTimeMs = performance.now();
       const results = poseLandmarker.detectForVideo(video, startTimeMs);
@@ -104,24 +109,29 @@ function predictWebcam() {
           const shoulder_r = landmarks[11];
           const shoulder_l = landmarks[12];
 
-          // 거북목 검사
-          if (ear_r && shoulder_r && baselinePosture.hasOwnProperty('turtle_diff_x')) {
-            const current_turtle_diff = ear_r.x - shoulder_r.x;
-            // (부등호 > 로 수정된 버전)
-            const isTurtleNeck = current_turtle_diff > (baselinePosture.turtle_diff_x + THRESHOLD_TURTLE);
-            logMessage += `[거북목?: ${isTurtleNeck} (현재:${current_turtle_diff.toFixed(2)}, 기준:${baselinePosture.turtle_diff_x.toFixed(2)})] `;
+          // 1. 거북목 검사 (CVA 각도 기준)
+          if (ear_r && shoulder_r && baselinePosture.hasOwnProperty('turtle_angle_rad')) {
+            const dx = ear_r.x - shoulder_r.x;
+            const dy = ear_r.y - shoulder_r.y;
+            const current_angle_rad = Math.atan2(dy, dx);
+            
+            // 👇👇👇 (핵심 수정!) 거북목이 되면(턱이 빠지면) 각도가 '커집니다'.
+            const isTurtleNeck = current_angle_rad > (baselinePosture.turtle_angle_rad + THRESHOLD_TURTLE_ANGLE_RAD);
+            // 👆👆👆 (핵심 수정!)
+            
+            logMessage += `[거북목(Angle)?: ${isTurtleNeck} (현재:${current_angle_rad.toFixed(2)}, 기준:${baselinePosture.turtle_angle_rad.toFixed(2)})] `;
             if (isTurtleNeck) {
               isBadPosture = true;
               badPostureReason = "거북목";
             }
           }
           
-          // 기울임 검사
+          // 2. 기울임 검사 (Y좌표 차이 기준)
           if (shoulder_r && shoulder_l && baselinePosture.hasOwnProperty('tilt_diff_y')) {
             const current_tilt_diff = shoulder_r.y - shoulder_l.y;
             const tilt_deviation = current_tilt_diff - baselinePosture.tilt_diff_y;
-            const isTilted = Math.abs(tilt_deviation) > THRESHOLD_TILT;
-            logMessage += `[기울임?: ${isTilted} (현재:${current_tilt_diff.toFixed(2)}, 기준:${baselinePosture.tilt_diff_y.toFixed(2)})]`;
+            const isTilted = Math.abs(tilt_deviation) > THRESHOLD_TILT_Y_DIFF;
+            logMessage += `[기울임(Y)?: ${isTilted} (현재:${current_tilt_diff.toFixed(2)}, 기준:${baselinePosture.tilt_diff_y.toFixed(2)})]`;
             if (isTilted) {
               isBadPosture = true;
               badPostureReason = "기울어짐";
@@ -135,7 +145,7 @@ function predictWebcam() {
           if(Math.random() < 0.1) { console.log("기준 자세가 없습니다. 팝업에서 '자세 측정'을 눌러주세요."); }
         }
 
-        // --- 알림 타이머 로직 (통계 저장 기능 포함) ---
+        // --- 알림 타이머 로직 (이전과 동일) ---
         if (isBadPosture) {
           if (badPostureStartTime === null) {
             badPostureStartTime = Date.now();
@@ -147,13 +157,7 @@ function predictWebcam() {
               if (badPostureReason === "거북목") message = "거북목이 의심됩니다! 턱을 당기고 어깨를 펴세요.";
               else if (badPostureReason === "기울어짐") message = "몸이 기울었습니다! 자세를 바로잡으세요.";
               console.log(`알림 전송: ${message}`);
-              
-              // (통계 저장을 위해 'reason'을 함께 전송)
-              chrome.runtime.sendMessage({ 
-                action: "sendNotification", 
-                message: message,
-                reason: badPostureReason || "기타"
-              });
+              chrome.runtime.sendMessage({ action: "sendNotification", message: message, reason: badPostureReason || "기타" });
               notificationSent = true;
             }
           }
@@ -167,16 +171,14 @@ function predictWebcam() {
       }
       
     } else {
-      // 2. (복구 로직 1) 캘리브레이션 등으로 스트림이 멈췄을 때
       console.warn("비디오 스트림이 일시 중지(paused)되었습니다. 재시도를 시도합니다.");
       if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
-      setTimeout(enableCam, 1000); // 1초 후 웹캠 재시작
+      setTimeout(enableCam, 1000);
     }
   } catch (error) {
-    // 3. (복구 로직 2) 알 수 없는 오류로 루프가 죽었을 때
     console.error("predictWebcam 루프 중 치명적 오류 발생:", error);
     if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
-    setTimeout(enableCam, 3000); // 3초 후 웹캠 재시작
+    setTimeout(enableCam, 3000);
   }
 }
 
