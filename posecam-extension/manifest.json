@@ -20,6 +20,6 @@
   },
   
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' https://storage.googleapis.com; frame-src https://www.youtube-nocookie.com;"
   }
 }

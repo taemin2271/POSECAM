@@ -1,11 +1,11 @@
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
 let lastNotificationId = null;
-// (삭제) let stretchReminderCount = 0;
-// (삭제) let lastStretchNotificationId = null;
 
-// --- Offscreen Document 헬퍼 함수들 (이전과 동일) ---
+// --- Offscreen Document 헬퍼 함수들 (상단에 정의되어야 함) ---
 async function hasOffscreenDocument() {
-  const existingContexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT']
+  });
   return !!existingContexts.length;
 }
 async function createOffscreenDocument() {
@@ -24,37 +24,33 @@ async function closeOffscreenDocument() {
 }
 
 // -----------------------------------------------------------------------------
-// 이벤트 리스너 (onMessage) (🚨 민감도 로직 추가됨)
+// 이벤트 리스너 (onMessage) (🚨 'calibrate' 전달 로직 추가됨)
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener(async (message) => {
   if (message.action === "startMonitoring") {
-    // 1. 모니터링 시작
+    // 1. 모니터링 시작 (민감도/기준자세 전송)
     console.log("Service Worker: 모니터링 시작 메시지 수신");
-    
-    // (수정) 기준 자세와 민감도를 '동시에' 불러옵니다.
     const result = await chrome.storage.local.get(['baselinePosture', 'sensitivity']);
     const baseline = result.baselinePosture;
-    const sensitivity = result.sensitivity || 2; // 기본값 2 (보통)
-    
+    const sensitivity = result.sensitivity || 2;
     console.log("Service Worker: 저장된 기준 자세 불러옴:", baseline);
     console.log("Service Worker: 저장된 민감도 불러옴:", sensitivity);
     
     await createOffscreenDocument();
     
-    // (수정) 1초 지연 후, 기준 자세와 민감도를 '둘 다' 전송
     setTimeout(() => {
         chrome.runtime.sendMessage({ action: "setBaseline", data: baseline });
         chrome.runtime.sendMessage({ action: "setSensitivity", sensitivity: sensitivity });
-    }, 1000); // 1초 지연 (offscreen.js 로드 대기)
+    }, 1000); // offscreen.js 로드 대기
 
   } else if (message.action === "stopMonitoring") {
-    // 2. 모니터링 중지 (이전과 동일)
-    console.log("Service Worker: 모니터링 중지 메시지 수신");
+    // 2. '끄기' 요청 (PUSH 방식)
+    console.log("Service Worker: 모니터링 중지 메시지 수신.");
     await closeOffscreenDocument();
     if(lastNotificationId) { chrome.notifications.clear(lastNotificationId); lastNotificationId = null; }
     
   } else if (message.action === "sendNotification") {
-    // 3. 알림 전송 (이전과 동일)
+    // 3. 알림 전송
     console.log("Service Worker: 알림 요청 수신");
     if(lastNotificationId) { chrome.notifications.clear(lastNotificationId); }
     chrome.notifications.create({
@@ -62,14 +58,12 @@ chrome.runtime.onMessage.addListener(async (message) => {
       iconUrl: "images/icon128.png",
       title: "Posecam 경고",
       message: message.message
-    }, (notificationId) => {
-      lastNotificationId = notificationId;
-    });
+    }, (notificationId) => { lastNotificationId = notificationId; });
     
-    await saveStats(message.reason); 
+    await saveAlertStats(message.reason); 
 
   } else if (message.action === "saveBaseline") {
-    // 4. 기준 자세 저장 (이전과 동일)
+    // 4. 기준 자세 저장
     console.log("Service Worker: 기준 자세 저장 요청 수신", message.data);
     await chrome.storage.local.set({ baselinePosture: message.data });
     chrome.notifications.create({
@@ -77,38 +71,45 @@ chrome.runtime.onMessage.addListener(async (message) => {
       iconUrl: "images/icon128.png",
       title: "Posecam 알림",
       message: "기준 자세가 저장되었습니다!"
-    }, (notificationId) => {
-      lastNotificationId = notificationId;
-    });
+    }, (notificationId) => { lastNotificationId = notificationId; });
     
   } else if (message.action === "sensitivityChanged") {
-    // 5. (추가!) popup.js로부터 '민감도 변경' 메시지 수신
+    // 5. 민감도 변경 (offscreen.js로 전달)
     console.log("Service Worker: 민감도 변경 수신. offscreen.js로 전달.");
-    // offscreen.js에 바로 전달
     chrome.runtime.sendMessage(message);
+    
+  } else if (message.action === "calibrate") {
+    // 👇 (핵심 추가!) 1. calibrate.js로부터 '캘리브레이션' 메시지 수신
+    console.log("Service Worker: Calibrate 메시지 수신. offscreen.js로 전달.");
+    // 2. offscreen.js에 바로 전달
+    chrome.runtime.sendMessage(message); 
+        
+  } else if (message.action === "updateFrameStats") {
+    // 7. (추가!) offscreen.js로부터 '통계 PUSH'를 받음
+    console.log("프레임 통계 'Push' 수신:", message);
+    await saveFrameStats(message.goodFrames, message.badFrames);
   }
 });
 
-// (수정!) 오직 통계 저장만 하는 함수
-async function saveStats(reasonKey) {
+// (saveAlertStats, saveFrameStats 함수는 이전과 동일)
+async function saveAlertStats(reasonKey) {
   const today = new Date().toISOString().split('T')[0];
   const result = await chrome.storage.local.get([today]);
-  
-  let todayStats = result[today] || { total: 0, byReason: {} };
-  todayStats.total += 1;
+  let todayStats = result[today] || { totalAlerts: 0, byReason: {}, goodFrames: 0, badFrames: 0 };
+  todayStats.totalAlerts += 1;
   todayStats.byReason[reasonKey] = (todayStats.byReason[reasonKey] || 0) + 1;
-  
   await chrome.storage.local.set({ [today]: todayStats });
-  console.log("통계 저장 완료:", todayStats);
-  
-  // (삭제!) 스트레칭 카운터 로직 모두 제거
+  console.log("알림 통계 저장 완료:", todayStats);
 }
-
-// (삭제!) 🚨 chrome.notifications.onButtonClicked.addListener(...) 함수 전체 삭제
-
-// ... (onStartup, onInstalled 리스너는 이전과 동일) ...
-
-
+async function saveFrameStats(goodFrames, badFrames) {
+  const today = new Date().toISOString().split('T')[0];
+  const result = await chrome.storage.local.get([today]);
+  let todayStats = result[today] || { totalAlerts: 0, byReason: {}, goodFrames: 0, badFrames: 0 };
+  todayStats.goodFrames += goodFrames;
+  todayStats.badFrames += badFrames;
+  await chrome.storage.local.set({ [today]: todayStats });
+  console.log("프레임 통계 저장 완료:", todayStats);
+}
 
 // ... (onStartup, onInstalled 리스너는 이전과 동일) ...
 // -----------------------------------------------------------------------------
