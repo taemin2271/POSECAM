@@ -19,7 +19,23 @@
     "default_title": "Posecam"
   },
   
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "offscreen.html",
+        "offscreen.js",
+        "lib/*",
+        "images/*",
+        "tfjs_model/*"  
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' https://storage.googleapis.com; frame-src https://www.youtube-nocookie.com;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; connect-src 'self' https://storage.googleapis.com;"
+  },
+  "sandbox": {
+    "pages": ["sandbox.html"]
   }
 }

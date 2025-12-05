@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="lib/tf.min.js"></script>
+</head>
+<body>
+<script>
+  let model = null;
+
+  // 1. 모델 로드
+  async function loadModel() {
+    try {
+      // 샌드박스에서는 상대 경로로 모델을 찾습니다.
+      model = await tf.loadLayersModel('tfjs_model/model.json');
+      console.log("✅ [Sandbox] 모델 로드 완료!");
+      
+      // 부모(offscreen.js)에게 준비됐다고 알림
+      window.parent.postMessage({ type: 'MODEL_LOADED' }, '*');
+    } catch (e) {
+      console.error("❌ [Sandbox] 모델 로드 실패:", e);
+    }
+  }
+
+  loadModel();
+
+  // 2. 메시지 수신 (예측 요청)
+  window.addEventListener('message', async (event) => {
+    const { type, features } = event.data;
+
+    if (type === 'PREDICT' && model) {
+      try {
+        // 텐서 변환 및 예측
+        const inputTensor = tf.tensor2d([features]); // (1, 13)
+        const prediction = model.predict(inputTensor);
+        const probability = prediction.dataSync()[0];
+        
+        inputTensor.dispose(); // 메모리 정리
+
+        // 결과 반환
+        event.source.postMessage({ type: 'PREDICT_RESULT', probability }, event.origin);
+      } catch (e) {
+        console.error("예측 에러:", e);
+      }
+    }
+  });
+</script>
+</body>
+</html>

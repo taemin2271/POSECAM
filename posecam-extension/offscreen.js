@@ -4,12 +4,13 @@ console.log("Offscreen script가 성공적으로 로드되었습니다.");
 
 // --- 전역 변수 ---
 let poseLandmarker = undefined;
+let scalerParams = undefined; 
 let video;
-const NOTIFICATION_THRESHOLD_MS = 10000;
+const NOTIFICATION_THRESHOLD_MS = 10000; // 10초
 let badPostureStartTime = null;
-let notificationSent = false;
+let notificationSent = false; // 반복 알림을 위해 리셋됨
 let latestLandmarks = null;
-let baselinePosture = null;
+let baselinePosture = null; 
 let detectionIntervalId = null;
 const DETECTION_INTERVAL_MS = 100;
 
@@ -17,68 +18,125 @@ const DETECTION_INTERVAL_MS = 100;
 let goodFrameCount = 0;
 let badFrameCount = 0;
 
-// 민감도 맵 및 변수
-const SENSITIVITY_MAP = {
-  turtle: { 1: 0.14, 2: 0.07, 3: 0.035 },
-  tilt: { 1: 0.05, 2: 0.03, 3: 0.02 }
-};
-let currentTurtleThreshold = SENSITIVITY_MAP.turtle[2];
-let currentTiltThreshold = SENSITIVITY_MAP.tilt[2];
-function setSensitivity(level) {
-  const sensitivityLevel = level || 2;
-  currentTurtleThreshold = SENSITIVITY_MAP.turtle[sensitivityLevel];
-  currentTiltThreshold = SENSITIVITY_MAP.tilt[sensitivityLevel];
-  console.log(`민감도 ${sensitivityLevel}단계로 변경됨:`, {
-    turtle: currentTurtleThreshold,
-    tilt: currentTiltThreshold
+// 캘리브레이션 모드 변수
+let isCalibrationMode = false;
+const CALIBRATION_X_THRESHOLD = 0.05; 
+const CALIBRATION_Y_THRESHOLD = 0.05;
+
+// 샌드박스 통신용 변수
+let sandboxFrame = null;
+let isModelReady = false; // 모델 로드 상태 (샌드박스에서 알려줌)
+
+// -----------------------------------------------------------------------------
+// 0. 초기화: 스케일러 로드 & 샌드박스 연결
+// -----------------------------------------------------------------------------
+async function init() {
+  // 1. 스케일러 파라미터 로드
+  try {
+    const response = await fetch('tfjs_model/scaler_params.json');
+    scalerParams = await response.json();
+    console.log("✅ 스케일러 로드 완료");
+  } catch (e) {
+    console.error("❌ 스케일러 로드 실패:", e);
+  }
+
+  // 2. 샌드박스 iframe 찾기 및 통신 설정
+  sandboxFrame = document.getElementById('ai-sandbox');
+  
+  window.addEventListener('message', (event) => {
+    // 샌드박스가 "모델 로드 다 됐어요!"라고 신호를 보내면
+    if (event.data.type === 'MODEL_LOADED') {
+      console.log("✅ 딥러닝 모델 준비됨 (Sandbox)");
+      isModelReady = true;
+    } 
+    // 샌드박스가 "예측 결과(확률)"를 보내면
+    else if (event.data.type === 'PREDICT_RESULT') {
+      handlePredictionResult(event.data.probability);
+    }
   });
+
+  // 3. MediaPipe 시작
+  createPoseLandmarker();
 }
 
 // -----------------------------------------------------------------------------
-// 1. 캘리브레이션 및 메시지 리스너
+// 1. 예측 결과 처리 (10초 반복 알림 로직)
+// -----------------------------------------------------------------------------
+function handlePredictionResult(probability) {
+  // 0.5 (50%) 이상이면 거북목
+  const isBadPosture = probability > 0.5;
+
+  if (isBadPosture) {
+    console.log(`🐢 거북목 감지! (확률: ${(probability*100).toFixed(1)}%)`);
+    badFrameCount++;
+    
+    if (badPostureStartTime === null) {
+      badPostureStartTime = Date.now();
+    } else if (Date.now() - badPostureStartTime >= NOTIFICATION_THRESHOLD_MS) {
+      chrome.runtime.sendMessage({ 
+        action: "sendNotification", 
+        message: "거북목이 감지되었습니다! (AI 분석)", 
+        reason: "거북목" 
+      });
+      
+      console.log("알림 전송 완료. 타이머 리셋.");
+      badPostureStartTime = Date.now();
+    }
+  } else {
+    // 👇 [수정됨] 거북목 확률을 뒤집어서 '바른 자세 점수'로 변환합니다.
+    // 예: 거북목 확률이 0.2(20%)라면 -> (1 - 0.2) = 0.8(80%)로 출력
+    const goodPostureScore = (1 - probability) * 100;
+    
+    console.log(`✅ 바른 자세 (확률: ${goodPostureScore.toFixed(1)}%)`); 
+    
+    goodFrameCount++;
+    badPostureStartTime = null;
+    notificationSent = false;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 2. 메시지 리스너 (Service Worker 및 Popup 통신)
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === "calibrate") {
-    console.log("Calibrate 메시지 수신 (from calibrate.js)");
-    if (latestLandmarks) {
-      const ear_r = latestLandmarks[7];
-      const shoulder_r = latestLandmarks[11];
-      const shoulder_l = latestLandmarks[12];
-      if (ear_r && shoulder_r && shoulder_l) {
-        const dx = ear_r.x - shoulder_r.x;
-        const dy = ear_r.y - shoulder_r.y;
-        const turtle_angle_rad = Math.atan2(dy, dx);
-        const newBaseline = {
-          turtle_angle_rad: turtle_angle_rad,
-          tilt_diff_y: shoulder_r.y - shoulder_l.y
-        };
-        chrome.runtime.sendMessage({ action: "saveBaseline", data: newBaseline });
-        baselinePosture = newBaseline;
-        console.log("새로운 기준 자세(Angle)를 Service Worker에 저장 요청함:", newBaseline);
-      } else {
-        chrome.runtime.sendMessage({ action: "sendNotification", message: "자세를 감지할 수 없습니다. 카메라를 확인하고 다시 시도하세요." });
-      }
-    } else {
-      chrome.runtime.sendMessage({ action: "sendNotification", message: "자세를 감지할 수 없습니다. 카메라를 확인하고 다시 시도하세요." });
+  if (message.action === "calibrationStarted") {
+    console.log("Offscreen: 캘리브레이션 모드 시작.");
+    isCalibrationMode = true;
+    
+  } else if (message.action === "calibrationStopped") {
+    console.log("Offscreen: 캘리브레이션 모드 종료 (취소).");
+    isCalibrationMode = false;
+    
+  } else if (message.action === "calibrate") {
+    console.log("Offscreen: Calibrate 메시지 수신");
+    isCalibrationMode = false;
+    chrome.runtime.sendMessage({ action: "saveBaseline", data: { calibrated: true } });
+    
+  } else if (message.action === "stopMonitoring") {
+    console.log("Offscreen: 중지 요청 받음.");
+    
+    chrome.runtime.sendMessage({
+      action: "frameStatsResponse",
+      goodFrames: goodFrameCount,
+      badFrames: badFrameCount
+    });
+    
+    goodFrameCount = 0; badFrameCount = 0;
+    if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
+    if (video && video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
     }
-  } else if (message.action === "setBaseline") {
-    console.log("Service Worker로부터 기준 자세 받음:", message.data);
-    baselinePosture = message.data;
-  } else if (message.action === "sensitivityChanged" || message.action === "setSensitivity") {
-    setSensitivity(message.sensitivity);
   } else if (message.action === "updateFrameStats") {
-    // (service-worker.js의 버그 수정을 위해 이 핸들러를 임시로 비워둡니다)
+     // 주기적 통계 업데이트 요청 시
   }
 });
 
 // -----------------------------------------------------------------------------
-// 2. MediaPipe 초기화 및 웹캠 설정 (로컬 WASM, 오타 수정됨)
+// 3. MediaPipe & Webcam 설정
 // -----------------------------------------------------------------------------
 async function createPoseLandmarker() {
-  const vision = await FilesetResolver.forVisionTasks(
-    './wasm' // 로컬 wasm 폴더 사용
-  );
-  
+  const vision = await FilesetResolver.forVisionTasks('./wasm'); // 로컬 WASM 사용
   poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task`,
@@ -87,150 +145,135 @@ async function createPoseLandmarker() {
     runningMode: "VIDEO",
     numPoses: 1
   });
-  console.log("Pose Landmarker 모델이 성공적으로 로드되었습니다.");
+  console.log("Pose Landmarker 모델 로드됨");
   await enableCam();
 }
 
 async function enableCam() {
   if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
   video = document.getElementById("webcam"); 
+  
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(track => track.stop());
     video.srcObject = null;
   }
+  
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
     video.srcObject = stream;
-    video.removeEventListener("playing", startLoop);
     video.addEventListener("playing", startLoop);
     video.play();
-    console.log("웹캠이 성공적으로 연결되었습니다.");
-  } catch (err) { console.error("웹캠 접근 중 오류 발생:", err); }
+    console.log("웹캠 연결됨");
+  } catch (err) { console.error("웹캠 오류:", err); }
 }
 
 function startLoop() {
-  console.log("predictWebcam 루프 시작 (setInterval)");
+  console.log("루프 시작");
   if (detectionIntervalId) { clearInterval(detectionIntervalId); }
-  
   detectionIntervalId = setInterval(predictWebcam, DETECTION_INTERVAL_MS);
-  setInterval(pushStats, 5000); // 5초마다 통계 'Push'
+  setInterval(pushStats, 5000);
 }
 
-// 5초마다 통계를 'Push'하는 함수
 function pushStats() {
   if (goodFrameCount > 0 || badFrameCount > 0) {
-    console.log(`프레임 통계 'Push': G:${goodFrameCount} B:${badFrameCount}`);
     chrome.runtime.sendMessage({
       action: "updateFrameStats",
       goodFrames: goodFrameCount,
       badFrames: badFrameCount
     });
-    goodFrameCount = 0;
-    badFrameCount = 0;
+    goodFrameCount = 0; badFrameCount = 0;
   }
 }
 
 // -----------------------------------------------------------------------------
-// 3. 실시간 자세 분석 (자동 재시작 로직 포함)
+// 4. 실시간 분석 (특징 추출 -> 샌드박스 전송)
 // -----------------------------------------------------------------------------
+function extractFeaturesAndSend(landmarks) {
+  // 모델이 준비되지 않았거나 스케일러가 없으면 중단
+  if (!isModelReady || !scalerParams || !sandboxFrame) return;
+
+  // 1. 좌표 추출 (MediaPipe: 0:Nose, 11:L_Sho, 12:R_Sho)
+  const head = landmarks[0];
+  const l_sho = landmarks[11];
+  const r_sho = landmarks[12];
+  
+  // 가상의 목(Neck) = 어깨 중점
+  const neck = {
+    x: (l_sho.x + r_sho.x) / 2,
+    y: (l_sho.y + r_sho.y) / 2
+  };
+
+  // 2. 파생 변수 계산
+  const shoulder_width = Math.sqrt(Math.pow(r_sho.x - l_sho.x, 2) + Math.pow(r_sho.y - l_sho.y, 2)) + 1e-6;
+
+  // 👇 12개 변수 구성 (Python 학습 코드와 순서 일치)
+  // [Raw 8개 (Normalized)] + [파생 4개]
+  const features = [
+    // (1) 원본 좌표 8개: (내좌표 - 목좌표) / 어깨너비
+    (head.x - neck.x) / shoulder_width, (head.y - neck.y) / shoulder_width,
+    (neck.x - neck.x) / shoulder_width, (neck.y - neck.y) / shoulder_width,
+    (r_sho.x - neck.x) / shoulder_width, (r_sho.y - neck.y) / shoulder_width,
+    (l_sho.x - neck.x) / shoulder_width, (l_sho.y - neck.y) / shoulder_width,
+    
+    // (2) 파생 변수 4개
+    (head.y - neck.y) / shoulder_width,                                            // Feat_Y_Diff
+    Math.atan2(head.y - neck.y, head.x - neck.x),                                  // Feat_Angle
+    Math.sqrt(Math.pow(head.x - neck.x, 2) + Math.pow(head.y - neck.y, 2)) / shoulder_width, // Feat_Dist
+    Math.atan2(r_sho.y - l_sho.y, r_sho.x - l_sho.x)                               // Feat_Sho_Angle
+  ];
+
+  // 3. 스케일링 (StandardScaler)
+  const scaledFeatures = features.map((val, i) => {
+    const mean = scalerParams.mean[i] || 0;
+    const scale = scalerParams.scale[i] || 1;
+    return (val - mean) / scale;
+  });
+
+  // 4. 샌드박스에 예측 요청 (데이터 전송)
+  sandboxFrame.contentWindow.postMessage({ type: 'PREDICT', features: scaledFeatures }, '*');
+}
+
 function predictWebcam() {
   try {
-    if (video && !video.paused) {
+    if (video && !video.paused && poseLandmarker) {
       const startTimeMs = performance.now();
       const results = poseLandmarker.detectForVideo(video, startTimeMs);
 
       if (results.landmarks && results.landmarks.length > 0) {
         latestLandmarks = results.landmarks[0];
-        const landmarks = latestLandmarks;
         
-        let isBadPosture = false;
-        let badPostureReason = ""; 
-        let logMessage = ""; 
-
-        if (baselinePosture) {
-          const ear_r = landmarks[7];
-          const shoulder_r = landmarks[11];
-          const shoulder_l = landmarks[12];
-
-          // 거북목 검사
-          if (ear_r && shoulder_r && baselinePosture.hasOwnProperty('turtle_angle_rad')) {
-            const dx = ear_r.x - shoulder_r.x;
-            const dy = ear_r.y - shoulder_r.y;
-            const current_angle_rad = Math.atan2(dy, dx);
-            const isTurtleNeck = current_angle_rad > (baselinePosture.turtle_angle_rad + currentTurtleThreshold);
-            logMessage += `[거북목(Angle)?: ${isTurtleNeck} (현재:${current_angle_rad.toFixed(2)}, 기준:${baselinePosture.turtle_angle_rad.toFixed(2)})] `;
-            if (isTurtleNeck) {
-              isBadPosture = true;
-              badPostureReason = "거북목";
+        // 캘리브레이션 모드일 때
+        if (isCalibrationMode) {
+            const ear_r = latestLandmarks[7];
+            const shoulder_r = latestLandmarks[11];
+            const shoulder_l = latestLandmarks[12];
+            let inZone = false;
+            if (ear_r && shoulder_r && shoulder_l) {
+                const x_diff = Math.abs(ear_r.x - shoulder_r.x);
+                const y_diff = Math.abs(shoulder_r.y - shoulder_l.y);
+                if (x_diff < CALIBRATION_X_THRESHOLD && y_diff < CALIBRATION_Y_THRESHOLD) {
+                    inZone = true;
+                }
             }
-          }
-          
-          // 기울임 검사
-          if (shoulder_r && shoulder_l && baselinePosture.hasOwnProperty('tilt_diff_y')) {
-            const current_tilt_diff = shoulder_r.y - shoulder_l.y;
-            const tilt_deviation = current_tilt_diff - baselinePosture.tilt_diff_y;
-            const isTilted = Math.abs(tilt_deviation) > currentTiltThreshold;
-            logMessage += `[기울임(Y)?: ${isTilted} (현재:${current_tilt_diff.toFixed(2)}, 기준:${baselinePosture.tilt_diff_y.toFixed(2)})]`;
-            if (isTilted) {
-              isBadPosture = true;
-              badPostureReason = "기울어짐";
-            }
-          }
-          
-          console.log(logMessage || "랜드마크 감지 중... (기준 자세 있음)");
-          
-          if (isBadPosture) {
-            badFrameCount++;
-          } else {
-            goodFrameCount++;
-          }
-
-        } else {
-          isBadPosture = false;
-          if(Math.random() < 0.1) { console.log("기준 자세가 없습니다. 팝업에서 '자세 측정'을 눌러주세요."); }
+            chrome.runtime.sendMessage({ action: "calibrationStatus", status: inZone ? "in_zone" : "out_of_zone" });
+            return;
         }
 
-        // --- 알림 타이머 로직 ---
-        if (isBadPosture) {
-          if (badPostureStartTime === null) {
-            badPostureStartTime = Date.now();
-            console.log("나쁜 자세 감지 시작...");
-          } else {
-            const duration = Date.now() - badPostureStartTime;
-            if (duration >= NOTIFICATION_THRESHOLD_MS && !notificationSent) {
-              let message = "자세가 3초 이상 무너졌습니다!";
-              if (badPostureReason === "거북목") message = "거북목이 의심됩니다! 턱을 당기고 어깨를 펴세요.";
-              else if (badPostureReason === "기울어짐") message = "몸이 기울었습니다! 자세를 바로잡으세요.";
-              console.log(`알림 전송: ${message}`);
-              chrome.runtime.sendMessage({ action: "sendNotification", message: message, reason: badPostureReason || "기타" });
-              notificationSent = true;
-            }
-          }
-        } else {
-          if (badPostureStartTime !== null) { console.log("자세 복귀. 타이머 리셋."); }
-          badPostureStartTime = null;
-          notificationSent = false;
-        }
-      } else {
-        console.log("랜드마크를 감지하지 못했습니다. (results.landmarks is empty)");
+        // 일반 모드: 샌드박스로 데이터 전송
+        extractFeaturesAndSend(latestLandmarks);
       }
-      
     } else {
-      // (복구 로직 1) 캘리브레이션 등으로 스트림이 멈췄을 때
-      console.warn("비디오 스트림이 일시 중지(paused)되었거나, video 객체가 없습니다. 재시도를 시도합니다.");
-      if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
-      setTimeout(enableCam, 1000); // 1초 후 웹캠 재시작
-      return; // (중요) 재시작 전까지 루프 중단
+       // 카메라 재시작 로직
+       if (!video || video.paused) {
+         console.warn("비디오 멈춤. 재시작 시도.");
+         if (detectionIntervalId) clearInterval(detectionIntervalId);
+         setTimeout(enableCam, 1000);
+       }
     }
   } catch (error) {
-    // (복구 로직 2) 알 수 없는 오류로 루프가 죽었을 때
-    console.error("predictWebcam 루프 중 치명적 오류 발생:", error);
-    if (detectionIntervalId) { clearInterval(detectionIntervalId); detectionIntervalId = null; }
-    setTimeout(enableCam, 3000); // 3초 후 웹캠 재시작
+    console.error("루프 에러:", error);
   }
 }
 
-// -----------------------------------------------------------------------------
-// 5. 스크립트 시작 지점
-// -----------------------------------------------------------------------------
-createPoseLandmarker();
+// 시작!
+init();
