@@ -95,18 +95,32 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // [차트 2] 알림 발생 현황 (막대 차트)
-    // 현재는 시간대별 데이터가 없으므로 '오늘 총 알림'을 막대로 표시
+    // [차트 2] 시간대별 알림 추이 (수정됨)
+    
+    // 1. 시간대 라벨 만들기 (09시 ~ 22시, 혹은 활동 시간대 설정)
+    // 여기서는 깔끔하게 '오전 9시' ~ '밤 12시'까지 표현해 봅시다.
+    const timeLabels = [];
+    const timeData = [];
+    const hourlyStats = stats.hourlyAlerts || {}; // 데이터 없으면 빈 객체
+
+    // 반복문: 9시부터 24시(0시)까지 돌면서 데이터 채우기
+    // 만약 새벽에도 쓰신다면 i를 0부터 23까지 하셔도 됩니다.
+    for (let i = 9; i <= 24; i++) {
+        let hour = i % 24; // 24시는 0시로 표현
+        timeLabels.push(`${hour}시`);
+        timeData.push(hourlyStats[hour] || 0); // 해당 시간에 데이터 없으면 0
+    }
+
     new Chart(ctxTimeline, {
-      type: 'bar',
+      type: 'bar', // 선 그래프를 원하면 'line'으로 변경 가능
       data: {
-        labels: ['오늘의 알림'],
+        labels: timeLabels,
         datasets: [{
           label: '거북목 감지 횟수',
-          data: [stats.totalAlerts],
-          backgroundColor: ['#36A2EB'],
-          borderRadius: 8,
-          barThickness: 50 // 막대 두께 고정
+          data: timeData,
+          backgroundColor: '#36A2EB', // 막대 색상
+          borderRadius: 4, // 둥근 모서리
+          maxBarThickness: 30 // 막대 최대 굵기
         }]
       },
       options: {
@@ -115,15 +129,23 @@ document.addEventListener('DOMContentLoaded', () => {
         scales: {
           y: {
             beginAtZero: true,
-            suggestedMax: 10, // 눈금 최소 10까지는 보이게
+            suggestedMax: 5, // 데이터가 적을 때도 그래프 모양 유지
+            ticks: { stepSize: 1 }, // y축을 1단위로 정수만 표시
             grid: { color: '#f0f0f0' }
           },
           x: {
-            grid: { display: false }
+            grid: { display: false } // x축 세로선 숨김 (깔끔하게)
           }
         },
         plugins: {
-          legend: { display: false } // 범례 숨김 (라벨 하나라 불필요)
+          legend: { display: false }, // 범례 숨김
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return ` ${context.raw}회 감지됨`;
+              }
+            }
+          }
         }
       }
     });

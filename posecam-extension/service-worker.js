@@ -180,17 +180,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // -----------------------------------------------------------------------------
 // 통계 저장 함수들
 // -----------------------------------------------------------------------------
+// service-worker.js 하단 부분
+
 async function saveAlertStats(reasonKey) {
   const today = new Date().toISOString().split('T')[0];
+  const currentHour = new Date().getHours(); // 현재 시간 (0 ~ 23)
+
   const result = await chrome.storage.local.get([today]);
   
-  let todayStats = result[today] || { totalAlerts: 0, byReason: {}, goodFrames: 0, badFrames: 0 };
+  // 기존 데이터 가져오기 (없으면 초기화)
+  let todayStats = result[today] || { 
+    totalAlerts: 0, 
+    byReason: {}, 
+    hourlyAlerts: {}, // 👈 새로 추가된 필드!
+    goodFrames: 0, 
+    badFrames: 0 
+  };
   
+  // 1. 전체 카운트 증가
   todayStats.totalAlerts += 1;
+  
+  // 2. 원인별 카운트 (이건 UI에서 안 쓰지만 일단 저장 유지)
   todayStats.byReason[reasonKey] = (todayStats.byReason[reasonKey] || 0) + 1;
+
+  // 3. [핵심] 시간대별 카운트 증가
+  // 예: hourlyAlerts: { "9": 1, "14": 3 }
+  if (!todayStats.hourlyAlerts) todayStats.hourlyAlerts = {}; // 기존 데이터 호환용 안전장치
+  todayStats.hourlyAlerts[currentHour] = (todayStats.hourlyAlerts[currentHour] || 0) + 1;
   
   await chrome.storage.local.set({ [today]: todayStats });
-  console.log("알림 통계 저장 완료:", todayStats);
+  console.log(`[SW] ${currentHour}시 알림 저장 완료. (총 ${todayStats.totalAlerts}회)`);
 }
 
 async function saveFrameStats(goodFrames, badFrames) {
