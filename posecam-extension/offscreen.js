@@ -77,7 +77,7 @@ async function init() {
 // 1. 예측 결과 처리 (소리 알림 추가됨!)
 // -----------------------------------------------------------------------------
 function handlePredictionResult(probability) {
-  const isBadPosture = probability > 0.35;
+  const isBadPosture = probability > 0.30;
 
   if (isBadPosture) {
     console.log(`🐢 거북목 감지!`);
