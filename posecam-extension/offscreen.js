@@ -14,7 +14,7 @@ let poseLandmarker = undefined;
 let scalerParams = undefined; 
 let video;
 
-// 👇 기본 10초
+// 👇 기본 6초
 let notificationThresholdMs = 6000; 
 
 let badPostureStartTime = null;
