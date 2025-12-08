@@ -2,18 +2,24 @@ import { FilesetResolver, PoseLandmarker } from './lib/vision_bundle.js';
 
 console.log("Offscreen script가 성공적으로 로드되었습니다.");
 
+// --- [추가 1] 알림 효과음 (짧은 '띵' 소리) ---
+// 별도의 mp3 파일 없이도 이 코드로 바로 소리가 납니다.
+// 👇 이걸로 교체하세요! (선명한 알림음)
+const ALERT_SOUND_SRC = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YWYGAABAAD8APwBAAEEAQgBCAEMARABFAEUARgBHAEgASABJAEoASwBLAEwATQBOAE8ATwBQAFEAUgBSAFMAVABVAFUAVgBXAFgAWQBZAFoAWwBcAF0AXQBeAF8AYABhAGEAYgBjAGQAZQBmAGYAZwBoAGkAagBqAGsAbABtAG4AbwBvAHAAcQByAHMAdAB0AHUAdgB3AHgAeQB6AHoAewB8AH0AfgB/AIAAgACBAIIAgwCEAIUAhgCHAIcAiACJAIoAiwCMAI0AjgCPAI8AkACRAJIAkwCUAJUAlgCXAJgAmQCaAJsAnACdAJ4AnwCgAKEAogCjAKQApQCmAKcAqACpAKoAqwCsAK0ArgCvALAAsQCyALMAtAC1ALYAtwC4ALkAugC7ALwAvQC+AL8AwADBAMIAwwDEAMUAxgDHAMgAyQDKAMsAzADNAM4AzwDQANEA0gDTANQA1QDWANcA2ADZANoA2wDcAN0A3gDfAOAA4QDiAOMA5ADlAOYA5wDoAOkA6gDrAOwA7QDuAO8A8ADxAPIA8wD0APUA9gD3APgA+QD6APsA/AD9AP4A/wAAAAEAAgADAAQABQAGAAcACAAJAAoACwAMAA0ADgAPABAAEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB8AIAAhACIAIwAkACUAJgAnACgAKQAqACsALAAtAC4ALwAwADEAMgAzADQANQA2ADcANAA1ADYANwA4ADkAOgA7ADwAPQA+AD8AQABBAEIAQwBEAEUARgBHAEgASABJAEoASwBLAEwATQBOAE8AUABRAFIAUwBUAFUAVgBXAFgAWQBaAFsAXABdAF4AXwBgAGEAYgBjAGQAZQBmAGcAaABpAGoAqwCsAK0ArgCvALAAsQCyALMAtAC1ALYAtwC4ALkAugC7ALwAvQC+AL8AwADBAMIAwwDEAMUAxgDHAMgAyQDKAMsAzADNAM4AzwDQANEA0gDTANQA1QDWANcA2ADZANoA2wDcAN0A3gDfAOAA4QDiAOMA5ADlAOYA5wDoAOkA6gDrAOwA7QDuAO8A8ADxAPIA8wD0APUA9gD3APgA+QD6APsA/AD9AP4A/wAAAAEAAgADAAQABQAGAAcACAAJAAoACwAMAA0ADgAPABAAEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB8AIAAhACIAIwAkACUAJgAnACgAKQAqACsALAAtAC4ALwAwADEAMgAzADQANQA2ADcANAA1ADYANwA4ADkAOgA7ADwAPQA+AD8AQABBAEIAQwBEAEUARgBHAEgASABJAEoASwBLAEwATQBOAE8AUABRAFIAUwBUAFUAVgBXAFgAWQBaAFsAXABdAF4AXwBgAGEAYgBjAGQAZQBmAGcAaABpAGoAqwCsAK0ArgCvALAAsQCyALMAtAC1ALYAtwC4ALkAugC7ALwAvQC+AL8AwADBAMIAwwDEAMUAxgDHAMgAyQDKAMsAzADNAM4AzwDQANEA0gDTANQA1QDWANcA2ADZANoA2wDcAN0A3gDfAOAA4QDiAOMA5ADlAOYA5wDoAOkA6gDrAOwA7QDuAO8A8ADxAPIA8wD0APUA9gD3APgA+QD6APsA/AD9AP4A/wAAAAEAAgADAAQABQAGAAcACAAJAAoACwAMAA0ADgAPABAAEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB8AIAAhACIAIwAkACUAJgAnACgAKQAqACsALAAtAC4ALwAwADEAMgAzADQANQA2ADcANAA1ADYANwA4ADkAOgA7ADwAPQA+AD8AQABBAEIAQwBEAEUARgBHAEgASABJAEoASwBLAEwATQBOAE8AUABRAFIAUwBUAFUAVgBXAFgAWQBaAFsAXABdAF4AXwBgAGEAYgBjAGQAZQBmAGcAaABpAGo=";
+const alertAudio = new Audio(ALERT_SOUND_SRC);
+alertAudio.volume = 1.0; // 볼륨 최대
+
 // --- 전역 변수 ---
 let poseLandmarker = undefined;
 let scalerParams = undefined; 
 let video;
 
-// 👇 [수정 1] const를 let으로 바꾸고 이름도 쓰기 편하게 변경 (기본값 10초)
-let notificationThresholdMs = 10000; 
+// 👇 기본 10초
+let notificationThresholdMs = 6000; 
 
 let badPostureStartTime = null;
-let notificationSent = false; // 반복 알림을 위해 리셋됨
+let notificationSent = false;
 let latestLandmarks = null;
-let baselinePosture = null; 
 let detectionIntervalId = null;
 const DETECTION_INTERVAL_MS = 100;
 
@@ -34,16 +40,15 @@ let isModelReady = false;
 // 0. 초기화
 // -----------------------------------------------------------------------------
 async function init() {
-  // 스케일러 파라미터 로드
-
-  // 👇 [추가] 1. 시작하자마자 현재 설정된 민감도 시간 가져오기
+  // 1. 초기 민감도 가져오기
   chrome.runtime.sendMessage({ action: "requestSensitivity" }, (response) => {
       if (response && response.time) {
           notificationThresholdMs = response.time;
           console.log(`✅ 초기 민감도 설정 완료: ${notificationThresholdMs/1000}초`);
       }
   });
-  
+
+  // 2. 스케일러 파라미터 로드
   try {
     const response = await fetch('tfjs_model/scaler_params.json');
     scalerParams = await response.json();
@@ -52,7 +57,7 @@ async function init() {
     console.error("❌ 스케일러 로드 실패:", e);
   }
 
-  // 샌드박스 설정
+  // 3. 샌드박스 설정
   sandboxFrame = document.getElementById('ai-sandbox');
   window.addEventListener('message', (event) => {
     if (event.data.type === 'MODEL_LOADED') {
@@ -64,46 +69,47 @@ async function init() {
     }
   });
 
-  // MediaPipe 시작
+  // 4. MediaPipe 시작
   createPoseLandmarker();
 }
 
 // -----------------------------------------------------------------------------
-// 1. 예측 결과 처리
+// 1. 예측 결과 처리 (소리 알림 추가됨!)
 // -----------------------------------------------------------------------------
 function handlePredictionResult(probability) {
-  // 0.35 (35%) 이상이면 거북목 (민감도 판정 기준은 고정)
   const isBadPosture = probability > 0.35;
 
   if (isBadPosture) {
-    console.log(`🐢 거북목 감지! (확률: ${(probability*100).toFixed(1)}%)`);
+    console.log(`🐢 거북목 감지!`);
     badFrameCount++;
     
     if (badPostureStartTime === null) {
       badPostureStartTime = Date.now();
     } 
-    // 👇 [수정 2] 고정된 상수 대신 변수(notificationThresholdMs)를 사용
     else if (Date.now() - badPostureStartTime >= notificationThresholdMs) {
         
-      if (!notificationSent) { // 이미 보냈으면 중복 전송 방지
+      if (!notificationSent) { 
+          // 🔔 [추가 2] 소리 재생!
+          playAlertSound();
+
+          // 기존 알림 전송
           chrome.runtime.sendMessage({ 
             action: "sendNotification", 
-            message: "거북목이 감지되었습니다! (AI 분석)", 
+            message: "거북목이 감지되었습니다! 허리를 펴세요.", 
             reason: "거북목" 
           });
           
-          console.log(`⏰ ${notificationThresholdMs/1000}초 경과 알림 전송 완료.`);
+          console.log(`⏰ ${notificationThresholdMs/1000}초 경과 알림(소리포함) 전송 완료.`);
           notificationSent = true; 
           
-          // 알림 보내고 나서 타이머 리셋 (계속 나쁜 자세면 설정 시간 후 또 울림)
           badPostureStartTime = Date.now();
           notificationSent = false; 
       }
     }
   } else {
-    // 바른 자세일 때 점수 표시
+    // 바른 자세 처리
     const goodPostureScore = (1 - probability) * 100;
-    console.log(`✅ 바른 자세 (확률: ${goodPostureScore.toFixed(1)}%)`); 
+    console.log(`✅ 바른 자세`); 
     
     goodFrameCount++;
     badPostureStartTime = null;
@@ -111,8 +117,20 @@ function handlePredictionResult(probability) {
   }
 }
 
+// 🔊 소리 재생 함수 (에러 방지 처리 포함)
+function playAlertSound() {
+    // 브라우저 정책상 사용자가 먼저 상호작용하지 않으면 소리가 차단될 수 있음.
+    // 하지만 확장 프로그램 Offscreen 환경에서는 보통 허용됨.
+    try {
+        alertAudio.currentTime = 0; // 재생 위치 처음으로
+        alertAudio.play().catch(e => console.warn("소리 재생 실패 (브라우저 정책):", e));
+    } catch (e) {
+        console.error("오디오 에러:", e);
+    }
+}
+
 // -----------------------------------------------------------------------------
-// 2. 메시지 리스너 (Service Worker에서 명령 받기)
+// 2. 메시지 리스너
 // -----------------------------------------------------------------------------
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action === "calibrationStarted") {
@@ -125,7 +143,6 @@ chrome.runtime.onMessage.addListener((message) => {
     isCalibrationMode = false;
     chrome.runtime.sendMessage({ action: "saveBaseline", data: { calibrated: true } });
 
-  // 👇 [수정 3] Service Worker가 "시간 바꿔!"라고 하면 여기서 변수만 쏙 바꿈 (복잡한 로직 X)
   } else if (message.action === "updateSensitivity") {
       notificationThresholdMs = message.time;
       console.log(`알림 기준 시간 변경됨: ${notificationThresholdMs/1000}초`);
@@ -147,7 +164,7 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 // -----------------------------------------------------------------------------
-// 3. MediaPipe & Webcam 설정 (기존과 동일)
+// 3. MediaPipe & Webcam 설정 (동일)
 // -----------------------------------------------------------------------------
 async function createPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks('./wasm');
@@ -197,7 +214,7 @@ function pushStats() {
 }
 
 // -----------------------------------------------------------------------------
-// 4. 데이터 전송 및 예측 루프 (기존과 동일)
+// 4. 데이터 전송 및 예측 루프 (동일)
 // -----------------------------------------------------------------------------
 function extractFeaturesAndSend(landmarks) {
   if (!isModelReady || !scalerParams || !sandboxFrame) return;
@@ -239,7 +256,6 @@ function predictWebcam() {
         latestLandmarks = results.landmarks[0];
         
         if (isCalibrationMode) {
-            // 캘리브레이션 로직...
             const ear_r = latestLandmarks[7];
             const shoulder_r = latestLandmarks[11];
             const shoulder_l = latestLandmarks[12];
